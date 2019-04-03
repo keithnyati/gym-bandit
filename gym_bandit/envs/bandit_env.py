@@ -1,3 +1,5 @@
+'''Multi Armed Bandit - KTM'''
+
 import gym
 from gym import error, spaces, utils
 from gym.utils import seeding
@@ -38,6 +40,7 @@ class BanditEnv(gym.Env):
     def __init__(self):
         self.k = 10
         self.t = 1 # Zere or One
+        self.T = 1000 # Number of timesteps to end of episode
         self.q_star_mean = 0.0
         self.q_star_var = 1.0
         self.reward_Rt_var = 1.0
@@ -55,8 +58,8 @@ class BanditEnv(gym.Env):
 
 
     def reset(self):
-        self.q_star = np.random.normal(loc=self.q_star_mean, scale=self.q_star_var, size=self.K)
-        self.state_Qt = np.zeros((self.K,)) # initial state (action values) set to zeros
+        self.q_star = np.random.normal(loc=self.q_star_mean, scale=self.q_star_var, size=self.k)
+        self.state_Qt = np.zeros((self.k,)) # initial state (action values) set to zeros
         return np.array(self.state_Qt)
 
     def step(self, action):
@@ -68,9 +71,8 @@ class BanditEnv(gym.Env):
         self.state_Qt = state_Qt
         
         return np.array(self.state_Qt), reward_Rt, done, {}
+    
+    # TODO Add all the done functionality, with end of time being the termination state
 
     def render(self, mode='human'):
         print(f'Mean: {self.q_star}')
-
-    def optimal_choice(self):
-        return np.argmax(self.q_star)
