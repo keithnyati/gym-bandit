@@ -54,6 +54,9 @@ class BanditEnv(gym.Env):
         # Q: Is this a good idea
         self.reset()
 
+        self.state = None
+        self.done = None
+
     # def tune(self, K = 10):
     #     '''Set the bandit problem'''
     #     # self.stationary = stationary
@@ -61,24 +64,24 @@ class BanditEnv(gym.Env):
     #     self.reset()
 
     def reset(self):
-        # if self.stationary:
-        #    self.Dt = np.random.randn(self.K)
-        # else:
-        #    self.q_star = np.zeros(self.K)
         self.q_star = np.random.normal(loc=self.q_star_mean, scale=self.q_star_var, size=self.K)
-        self.Qt = np.zeros(self.K) # Initial state (action values) taken to be zeros
+        self.state = np.zeros((1, self.K)) # Initial state (action values) taken to be zeros
+            return np.array(self.state).reshape((1, self.K))
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
-        state = self.state
+        Qt = self.state
         x, x_dot, theta, theta_dot = state
 
+        reward = np.random.normal(loc=q_star[action], scale=1.0)
 
-        # if not self.stationary:
-        #     walk = np.random.normal(0, 0.01, self.K)
-        # self.q_star += walk
+        Qt[action] = Qt[action] + (1/n)*(Rt - Qt[action])
 
-        # return None, np.random.randn() + self.q_star[action], False, None
+
+        self.state = (x,x_dot,theta,theta_dot)
+               
+        
+        return np.array(self.state), reward, done, {}
 
     def render(self, mode='human'):
         print(f'Mean: {self.q_star}')
