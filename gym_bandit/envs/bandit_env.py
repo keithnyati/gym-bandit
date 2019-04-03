@@ -62,13 +62,9 @@ class BanditEnv(gym.Env):
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         state_Qt = self.state_Qt
-        
-        reward_Rt = np.random.normal(loc=q_star[action], scale=reward_Rt_var)
-
+        reward_Rt = np.random.normal(loc=self.q_star[action], scale=self.reward_Rt_var)
         state_Qt[action] = state_Qt[action] + (1/self.t)*(reward_Rt - state_Qt[action])
-
         self.t += 1
-        
         self.state_Qt = state_Qt
         
         return np.array(self.state_Qt), reward_Rt, done, {}
