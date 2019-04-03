@@ -48,7 +48,7 @@ class BanditEnv(gym.Env):
         Qt_low = np.finfo(np.float32).min
 
         self.action_space = spaces.Discrete(self.K)
-        self.observation_space = spaces.Box(low=Qt_low, high=Qt_high, shape=(1, self.K), dtype=np.float32)
+        self.observation_space = spaces.Box(low=Qt_low, high=Qt_high, shape=(self.K,), dtype=np.float32)
 
         # This will reset after every episode
         # Q: Is this a good idea
@@ -65,8 +65,8 @@ class BanditEnv(gym.Env):
 
     def reset(self):
         self.q_star = np.random.normal(loc=self.q_star_mean, scale=self.q_star_var, size=self.K)
-        self.state = np.zeros((1, self.K)) # Initial state (action values) taken to be zeros
-            return np.array(self.state).reshape((1, self.K))
+        self.state = np.zeros((self.K,)) # initial state (action values) set to zeros
+        return np.array(self.state)
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
