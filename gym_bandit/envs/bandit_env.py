@@ -13,12 +13,12 @@ class BanditEnv(gym.Env):
     Source:
         This environment corresponds to the version of the k-armed bandit problem described by Sutton and Barto
     Observation: 
-        Type: Box(K)
+        Type: Box(k)
         Num	Observation               Mean         Variance
         Qt	Action Value Estimate      0.0            1.0
         
     Actions:
-        Type: Discrete(K)
+        Type: Discrete(k)
         Num	Action
         a	Pull arm a
         
@@ -36,52 +36,42 @@ class BanditEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
     def __init__(self):
-        self.K = 10
-        self.q_star = []
+        self.k = 10
+        self.t = 1 # Zere or One
         self.q_star_mean = 0.0
         self.q_star_var = 1.0
-        self.Qt = []
-        # self.stationary = True
-
-        # Action value set to -inf to +inf for each action `a`
-        Qt_high = np.finfo(np.float32).max
-        Qt_low = np.finfo(np.float32).min
-
-        self.action_space = spaces.Discrete(self.K)
-        self.observation_space = spaces.Box(low=Qt_low, high=Qt_high, shape=(self.K,), dtype=np.float32)
-
-        # This will reset after every episode
-        # Q: Is this a good idea
-        self.reset()
-
-        self.state = None
+        self.reward_Rt_var = 1.0
+        
+        self.q_star = None
+        self.state_Qt = None
         self.done = None
+        
+        # Bounds: action value bounds set to -inf to +inf for each action `a`
+        state_Qt_high = np.finfo(np.float32).max
+        state_Qt_low = np.finfo(np.float32).min
 
-    # def tune(self, K = 10):
-    #     '''Set the bandit problem'''
-    #     # self.stationary = stationary
-    #     self.K = K
-    #     self.reset()
+        self.action_space = spaces.Discrete(self.k)
+        self.observation_space = spaces.Box(low=state_Qt_low, high=state_Qt_high, shape=(self.k,), dtype=np.float32)
+
 
     def reset(self):
         self.q_star = np.random.normal(loc=self.q_star_mean, scale=self.q_star_var, size=self.K)
-        self.state = np.zeros((self.K,)) # initial state (action values) set to zeros
-        return np.array(self.state)
+        self.state_Qt = np.zeros((self.K,)) # initial state (action values) set to zeros
+        return np.array(self.state_Qt)
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
-        Qt = self.state
-        x, x_dot, theta, theta_dot = state
-
-        reward = np.random.normal(loc=q_star[action], scale=1.0)
-
-        Qt[action] = Qt[action] + (1/n)*(Rt - Qt[action])
-
-
-        self.state = (x,x_dot,theta,theta_dot)
-               
+        state_Qt = self.state_Qt
         
-        return np.array(self.state), reward, done, {}
+        reward_Rt = np.random.normal(loc=q_star[action], scale=reward_Rt_var)
+
+        state_Qt[action] = state_Qt[action] + (1/self.t)*(reward_Rt - state_Qt[action])
+
+        self.t += 1
+        
+        self.state_Qt = state_Qt
+        
+        return np.array(self.state_Qt), reward_Rt, done, {}
 
     def render(self, mode='human'):
         print(f'Mean: {self.q_star}')
