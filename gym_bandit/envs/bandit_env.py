@@ -109,4 +109,4 @@ class BanditEnv(gym.Env):
 
     def sample(self):
         a = np.random.randint(0, self.k)
-        return step(a)
+        return self.step(a)
