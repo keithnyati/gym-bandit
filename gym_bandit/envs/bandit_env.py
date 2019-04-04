@@ -1,7 +1,7 @@
 '''Multi Armed Bandit - KTM'''
 
 import gym
-from gym import error, spaces, utils
+from gym import error, spaces, utils, logger
 from gym.utils import seeding
 import numpy as np
 
@@ -16,9 +16,10 @@ class BanditEnv(gym.Env):
         This environment corresponds to the version of the k-armed bandit problem described by Sutton and Barto
     Observation: 
         Type: Box(k)
-        Num	Observation               Mean         Variance
-        Qt	Action Value Estimate      0.0            1.0
-        
+        Sym Col	 Observation             dtype         Min  Max   Mean  Variance
+        t   0    Timestep                np.array[0,0] 0    1000
+        n   1    Times Action Selected   np.array      0    1000
+        Qn	2    Action Value Estimate   np.array     -inf  +inf  0.0   1.0
     Actions:
         Type: Discrete(k)
         Num	Action
@@ -39,40 +40,81 @@ class BanditEnv(gym.Env):
 
     def __init__(self):
         self.k = 10
-        self.t = 1 # Zere or One
         self.T = 1000 # Number of timesteps to end of episode
         self.q_star_mean = 0.0
         self.q_star_var = 1.0
-        self.reward_Rt_var = 1.0
-        
-        self.q_star = None
-        self.state_Qt = None
-        self.done = None
+        self.Rt_var = 1.0
         
         # Bounds: action value bounds set to -inf to +inf for each action `a`
-        state_Qt_high = np.finfo(np.float32).max
-        state_Qt_low = np.finfo(np.float32).min
-
+        Qn_high = np.finfo(np.float32).max
+        Qn_low = np.finfo(np.float32).min
         self.action_space = spaces.Discrete(self.k)
-        self.observation_space = spaces.Box(low=state_Qt_low, high=state_Qt_high, shape=(self.k,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=Qn_low, high=Qn_high, shape=(3, self.k), dtype=np.float32)
 
+        self.q_star = None
+        self.state = None
+        self.done = None
+        self.steps_beyond_done = None
 
     def reset(self):
+
+        # 'true' action value for each arbitrary action `a`
         self.q_star = np.random.normal(loc=self.q_star_mean, scale=self.q_star_var, size=self.k)
-        self.state_Qt = np.zeros((self.k,)) # initial state (action values) set to zeros
-        return np.array(self.state_Qt)
+
+        # reset timesteps
+        self.t = 1
+
+        # initial state (action values) set to zeros
+        self.Qn = np.zeros((self.k,)) 
+        
+        # initial number of times arbitrary action (a) has been selected
+        self.n = np.zeros((self.k,))
+
+        return np.array(self.Qn)
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
-        state_Qt = self.state_Qt
-        reward_Rt = np.random.normal(loc=self.q_star[action], scale=self.reward_Rt_var)
-        state_Qt[action] = state_Qt[action] + (1/self.t)*(reward_Rt - state_Qt[action])
-        self.t += 1
-        self.state_Qt = state_Qt
+        At = action
+
+        # TODO Make this all the observed state
+        Qn = self.Qn
+        n = self.n
+        t = self.t
         
-        return np.array(self.state_Qt), reward_Rt, done, {}
-    
-    # TODO Add all the done functionality, with end of time being the termination state
+        # update timestep
+        t += 1
+
+        # Rt (reward) selected per timestep according to a normal (Gaussian) ...
+        # ... distribution with mean as q_star (true action value) and variance 1
+        Rt = np.random.normal(loc=self.q_star[At], scale=self.Rt_var)
+        
+        # update number of times action (At) has been selected
+        n[At] += 1
+
+        # update estimated action value for selected action (At = a)
+        Qn[At] = Qn[At] + (1/n[At])*(Rt - Qn[At])
+        
+        # termination state is the end of timesteps (T)
+        done = bool(t < self.T)
+
+        if not done:
+            reward = Rt
+        elif self.steps_beyond_done is None:
+            # End of episode!
+            self.steps_beyond_done = 0
+            reward = Rt
+        else:
+            if self.steps_beyond_done == 0:
+                logger.warn("You are calling 'step()' even though this environment has already returned done = True. You should always call 'reset()' once you receive 'done = True' -- any further steps are undefined behavior.")
+            self.steps_beyond_done += 1
+            reward = 0.0
+
+        # TODO Make this all the observed state
+        self.Qn = Qn
+        self.n = n
+        self.t = t
+        
+        return np.array(self.Qn), reward, done, {}
 
     def render(self, mode='human'):
         print(f'Mean: {self.q_star}')
