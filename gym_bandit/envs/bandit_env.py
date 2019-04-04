@@ -49,7 +49,7 @@ class BanditEnv(gym.Env):
         Qn_high = np.finfo(np.float32).max
         Qn_low = np.finfo(np.float32).min
         self.action_space = spaces.Discrete(self.k)
-        self.observation_space = spaces.Box(low=Qn_low, high=Qn_high, shape=(3, self.k), dtype=np.float32)
+        self.observation_space = spaces.Box(low=Qn_low, high=Qn_high, shape=(1 + 2 * self.k,), dtype=np.float32)
 
         self.q_star = None
         self.state = None
@@ -57,29 +57,20 @@ class BanditEnv(gym.Env):
         self.steps_beyond_done = None
 
     def reset(self):
-
         # 'true' action value for each arbitrary action `a`
         self.q_star = np.random.normal(loc=self.q_star_mean, scale=self.q_star_var, size=self.k)
 
-        # reset timesteps
-        self.t = 1
+        # init state: columns = timestep (t), times action selected (n), estimate action value (Qn)
+        self.state = np.zeros(1 + 2 * self.k,)
 
-        # initial state (action values) set to zeros
-        self.Qn = np.zeros((self.k,)) 
-        
-        # initial number of times arbitrary action (a) has been selected
-        self.n = np.zeros((self.k,))
-
-        return np.array(self.Qn)
+        return np.array(self.state)
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         At = action
 
-        # TODO Make this all the observed state
-        Qn = self.Qn
-        n = self.n
-        t = self.t
+        state = self.state
+        t, n, Qn = state[0], state[1:self.k+1], state[self.k+1:]
         
         # update timestep
         t += 1
@@ -109,12 +100,9 @@ class BanditEnv(gym.Env):
             self.steps_beyond_done += 1
             reward = 0.0
 
-        # TODO Make this all the observed state
-        self.Qn = Qn
-        self.n = n
-        self.t = t
+        state[0], state[1:self.k+1], state[self.k+1:] = t, n, Qn 
         
-        return np.array(self.Qn), reward, done, {}
+        return np.array(self.state), reward, done, {}
 
     def render(self, mode='human'):
         print(f'Mean: {self.q_star}')
