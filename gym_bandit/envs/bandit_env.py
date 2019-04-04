@@ -15,11 +15,11 @@ class BanditEnv(gym.Env):
     Source:
         This environment corresponds to the version of the k-armed bandit problem described by Sutton and Barto
     Observation: 
-        Type: Box(k)
-        Sym Col	 Observation             dtype         Min  Max   Mean  Variance
-        t   0    Timestep                np.array[0,0] 0    1000
-        n   1    Times Action Selected   np.array      0    1000
-        Qn	2    Action Value Estimate   np.array     -inf  +inf  0.0   1.0
+        Type: Box(1 + 2*k)
+        Sym ix	    Observation             Min  Max   Mean  Variance
+        t   [0]     Timestep                0    1000
+        n   [1:k+1] Times Action Selected   0    1000
+        Qn	[k+1:]  Action Value Estimate  -inf  +inf  0.0   1.0
     Actions:
         Type: Discrete(k)
         Num	Action
