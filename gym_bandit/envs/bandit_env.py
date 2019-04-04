@@ -106,3 +106,7 @@ class BanditEnv(gym.Env):
 
     def render(self, mode='human'):
         print(f'Mean: {self.q_star}')
+
+    def sample(self):
+        a = np.random.randint(0, self.k)
+        return step(a)
