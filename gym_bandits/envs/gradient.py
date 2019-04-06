@@ -1,35 +1,36 @@
-'''Multi Armed Bandit - KTM'''
-
 import gym
 from gym import error, spaces, utils, logger
 from gym.utils import seeding
 import numpy as np
 
-class BanditEnv(gym.Env):
+class GradientBanditEnv(gym.Env):
     """
     Description:
-        A multi armed bandit environment based on that presented by Sutton and Barto (2018) in 'Reinforcement Learning: An Introduction' used to roughly assess the relative effectiveness of the greedy and epsilon-greedy action-value methods
+        A gradient multi (10) armed bandit environment based on that presented by Sutton and Barto (2018) in 'Reinforcement Learning: An Introduction' used to roughly assess the relative effectiveness of the greedy and epsilon-greedy action-value methods
         
         This testbed randomly generates k-armed bandit problems with the action values selected for each episode according to a normal (Gaussian) distribution with mean 0 and variance 1 and the reward selected at each timestep from a normal distribution with mean as the action value and variance 1.
  
     Source:
         This environment corresponds to the version of the k-armed bandit problem described by Sutton and Barto
     Observation: 
-        Type: Box(1 + 2*k)
-        Sym ix	    Observation             Min  Max   Mean  Variance
-        t   [0]     Timestep                0    1000
-        n   [1:k+1] Times Action Selected   0    1000
-        Qn	[k+1:]  Action Value Estimate  -inf  +inf  0.0   1.0
+        Type: Box(1 + 4*k)
+        Sym ix	            Observation             Min  Max   Mean  Variance
+        t   [0]             Timestep                0    1000
+        n   [1:k+1]         Times Action Selected   0    1000
+        Rt	[k+1: 2*k+1]    Average Reward         -inf  +inf  0.0   1.0
+        Ht	[2*k+1: 3*k+1]  Action Preference      -inf  +inf
+        Pr	[3*k+1: 4*k+1]  Action Probabilty       0.0  1.0
+        
     Actions:
         Type: Discrete(k)
         Num	Action
         a	Pull arm a
         
-        Note: The action value estimate, Qt, for each action,a, is reduced or increased and is not fixed; it depends on both the true action values (hidden) and the observed rewards per action.
+        Note: TODO: The action value estimate, Qt, for each action,a, is reduced or increased and is not fixed; it depends on both the true action values (hidden) and the observed rewards per action.
     Reward:
         Reward, Rt, is selected from a normal distribution with mean `q_star` and variance 1.
     Starting State:
-        All observations are assigned a starting value of 0.
+        All observations, except for Pr, are assigned a starting value of 0. Pr is assigned a equal probabilities each 
     Episode Termination:
         Run out of timesteps
         Solved Requirements
@@ -49,7 +50,7 @@ class BanditEnv(gym.Env):
         Qn_high = np.finfo(np.float32).max
         Qn_low = np.finfo(np.float32).min
         self.action_space = spaces.Discrete(self.k)
-        self.observation_space = spaces.Box(low=Qn_low, high=Qn_high, shape=(1 + 2 * self.k,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=Qn_low, high=Qn_high, shape=(1 + 4 * self.k,), dtype=np.float32)
 
         self.q_star = None
         self.state = None
@@ -61,16 +62,24 @@ class BanditEnv(gym.Env):
         self.q_star = np.random.normal(loc=self.q_star_mean, scale=self.q_star_var, size=self.k)
 
         # init state: columns = timestep (t), times action selected (n), estimate action value (Qn)
-        self.state = np.zeros(1 + 2 * self.k,)
+        self.state = np.zeros(1 + 4 * self.k,)
+        
+        # init action probabilities
+        Pr = self.state[self.k * 3 +1:self.k * 4 +1]
+        Pr = softmax(Ht)
+        assert round(np.sum(Pr)-1.0, 7) == 0 # Assert Almost Equal
+        self.state = Pr
 
         return np.array(self.state)
 
-    def step(self, action):
+    def step(self, action):        
+    
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         At = action
 
         state = self.state
-        t, n, Qn = state[0], state[1:self.k+1], state[self.k+1:]
+        t, n, Rt = state[0], state[1:self.k+1], state[self.k+1:self.k * 2 +1]
+        Ht, Pr = state[self.k * 2 +1:self.k * 3 +1], state[self.k * 3 +1:self.k * 4 +1]
         
         # update timestep
         t += 1
@@ -82,8 +91,15 @@ class BanditEnv(gym.Env):
         # update number of times action (At) has been selected
         n[At] += 1
 
-        # update estimated action value for selected action (At = a)
-        Qn[At] = Qn[At] + (1/n[At])*(Rt - Qn[At])
+        # update average observed reward for selected action (At = a)
+        Rt_bar[At] = Rt_bar[At] + (1/n[At])*(Rt - Rt_bar[At])
+        
+        # update action preferences for each action a
+        Ht[At] = Ht[At] + learning_rate * (Rt - Rt_bar[At]) * (1 - Pr[At])
+        Ht[At] = Ht[At] - learning_rate * (Rt - Rt_bar[At]) * Pr[At]
+        
+        # update action probabilties for each action a
+        Pr = softmax(Ht)
         
         # termination state is the end of timesteps (T)
         done = bool(t < self.T)
@@ -100,13 +116,25 @@ class BanditEnv(gym.Env):
             self.steps_beyond_done += 1
             reward = 0.0
 
-        state[0], state[1:self.k+1], state[self.k+1:] = t, n, Qn 
+        state[0], state[1:self.k+1], state[self.k+1:self.k * 2 +1] = t, n, Rt 
+        state[self.k * 2 +1:self.k * 3 +1], state[self.k * 3 +1:self.k * 4 +1] = Ht, Pr
         
         return np.array(self.state), reward, done, {}
 
     def render(self, mode='human'):
         print(f'Mean: {self.q_star}')
+        
+        # @staticmethod
+    def softmax(Ht, norm=True):
+        if norm == True:
+            Ht = Ht/np.sum(Ht)
+        elif norm == False:
+            Ht = Ht
+        else:
+            print('Binary selection, this should not be possible')
 
-    def sample(self):
-        a = np.random.randint(0, self.k)
-        return self.step(a)
+        Pr = np.exp(Ht)/np.sum(np.exp(Ht))
+
+        assert round(np.sum(Pr)-1.0, 7) == 0 # Assert Almost Equal
+
+        return Pr   
