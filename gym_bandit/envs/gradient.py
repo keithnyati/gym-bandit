@@ -45,6 +45,7 @@ class GradientBanditEnv(gym.Env):
         self.q_star_mean = 0.0
         self.q_star_var = 1.0
         self.Rt_var = 1.0
+        self.learning_rate = 0.1
         
         # Bounds: action value bounds set to -inf to +inf for each action `a`
         Qn_high = np.finfo(np.float32).max
@@ -65,10 +66,11 @@ class GradientBanditEnv(gym.Env):
         self.state = np.zeros(1 + 4 * self.k,)
         
         # init action probabilities
-        Pr = self.state[self.k * 3 +1:self.k * 4 +1]
-        Pr = softmax(Ht)
+
+        Ht, Pr = self.state[self.k * 2 +1:self.k * 3 +1], self.state[self.k * 3 +1:self.k * 4 +1]
+        Pr = self.softmax(self, Ht)
         assert round(np.sum(Pr)-1.0, 7) == 0 # Assert Almost Equal
-        self.state = Pr
+        self.state[self.k * 3 +1:self.k * 4 +1] = Pr
 
         return np.array(self.state)
 
@@ -78,7 +80,7 @@ class GradientBanditEnv(gym.Env):
         At = action
 
         state = self.state
-        t, n, Rt = state[0], state[1:self.k+1], state[self.k+1:self.k * 2 +1]
+        t, n, Rt_bar = state[0], state[1:self.k+1], state[self.k+1:self.k * 2 +1]
         Ht, Pr = state[self.k * 2 +1:self.k * 3 +1], state[self.k * 3 +1:self.k * 4 +1]
         
         # update timestep
@@ -95,11 +97,11 @@ class GradientBanditEnv(gym.Env):
         Rt_bar[At] = Rt_bar[At] + (1/n[At])*(Rt - Rt_bar[At])
         
         # update action preferences for each action a
-        Ht[At] = Ht[At] + learning_rate * (Rt - Rt_bar[At]) * (1 - Pr[At])
-        Ht[At] = Ht[At] - learning_rate * (Rt - Rt_bar[At]) * Pr[At]
+        Ht[At] = Ht[At] + self.learning_rate * (Rt - Rt_bar[At]) * (1 - Pr[At])
+        Ht[At] = Ht[At] - self.learning_rate * (Rt - Rt_bar[At]) * Pr[At]
         
         # update action probabilties for each action a
-        Pr = softmax(Ht)
+        Pr = self.softmax(self, Ht)
         
         # termination state is the end of timesteps (T)
         done = bool(t < self.T)
@@ -116,7 +118,7 @@ class GradientBanditEnv(gym.Env):
             self.steps_beyond_done += 1
             reward = 0.0
 
-        state[0], state[1:self.k+1], state[self.k+1:self.k * 2 +1] = t, n, Rt 
+        state[0], state[1:self.k+1], state[self.k+1:self.k * 2 +1] = t, n, Rt_bar 
         state[self.k * 2 +1:self.k * 3 +1], state[self.k * 3 +1:self.k * 4 +1] = Ht, Pr
         
         return np.array(self.state), reward, done, {}
@@ -125,7 +127,7 @@ class GradientBanditEnv(gym.Env):
         print(f'Mean: {self.q_star}')
         
         # @staticmethod
-    def softmax(Ht, norm=True):
+    def softmax(self, Ht, norm=True):
         if norm == True:
             Ht = Ht/np.sum(Ht)
         elif norm == False:
